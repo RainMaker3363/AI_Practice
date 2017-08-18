@@ -5,21 +5,30 @@ using UnityEngine;
 public class Grid : MonoBehaviour {
 
     //public Transform player;
-    public bool onlyDisplayPathGizmo;
+    public bool displayGridGizmo;
     public LayerMask unwalkableMask;
     public Vector2 gridWorldSize;
     public float nodeRadius;
+    public TerrianType[] walkableRegions;
+    LayerMask walkeableMask;
+    Dictionary<int, int> walkableRegionsDictionary = new Dictionary<int, int>();
 
     Node[,] grid;
 
     float nodeDiameter;
     int gridSizeX, gridSizeY;
 
-    private void Start()
+    void Awake()
     {
         nodeDiameter = nodeRadius * 2;
         gridSizeX = Mathf.RoundToInt(gridWorldSize.x / nodeDiameter);
         gridSizeY = Mathf.RoundToInt(gridWorldSize.y / nodeDiameter);
+
+        foreach(TerrianType region in walkableRegions)
+        {
+            walkeableMask.value |= region.terrainMask.value;
+            walkableRegionsDictionary.Add((int)Mathf.Log(region.terrainMask.value, 2), region.terrainPenalty);
+        }
 
         CreateGrid();
     }
@@ -43,7 +52,22 @@ public class Grid : MonoBehaviour {
             {
                 Vector3 worldPoint = WorldBottomLeft + Vector3.right * (x * nodeDiameter + nodeRadius) + Vector3.forward * (y * nodeDiameter + nodeRadius);
                 bool walkable = !(Physics.CheckSphere(worldPoint, nodeRadius, unwalkableMask));
-                grid[x, y] = new Node(walkable, worldPoint, x, y);
+
+                int movementPanalty = 0;
+
+                // raycast
+                if(walkable)
+                {
+                    Ray ray = new Ray(worldPoint + Vector3.up * 50.0f, Vector3.down);
+                    RaycastHit hit;
+
+                    if(Physics.Raycast(ray, out hit, 100, walkeableMask))
+                    {
+                        walkableRegionsDictionary.TryGetValue(hit.collider.gameObject.layer, out movementPanalty);
+                    }
+                }
+
+                grid[x, y] = new Node(walkable, worldPoint, x, y, movementPanalty);
             }
         }
     }
@@ -90,25 +114,25 @@ public class Grid : MonoBehaviour {
         return grid[x, y];
     }
 
-    public List<Node> path;
+    //public List<Node> path;
 
     private void OnDrawGizmos()
     {
         Gizmos.DrawWireCube(transform.position, new Vector3(gridWorldSize.x, 1, gridWorldSize.y));
 
-        if(onlyDisplayPathGizmo)
-        {
-            if(path != null)
-            {
-                foreach(Node n in path)
-                {
-                    Gizmos.color = Color.black;
-                    Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter - .1f));
-                }
-            }
-        }
+        //if(onlyDisplayPathGizmo)
+        //{
+        //    if(path != null)
+        //    {
+        //        foreach(Node n in path)
+        //        {
+        //            Gizmos.color = Color.black;
+        //            Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter - .1f));
+        //        }
+        //    }
+        //}
 
-        if (grid != null)
+        if (grid != null && displayGridGizmo)
         {
             //Node playerNode = NodeFromWorldPoint(player.position);
 
@@ -116,13 +140,13 @@ public class Grid : MonoBehaviour {
             {
                 Gizmos.color = (n.walkabls) ? Color.white : Color.red;
 
-                if(path != null)
-                {
-                    if(path.Contains(n))
-                    {
-                        Gizmos.color = Color.black;
-                    }
-                }
+                //if(path != null)
+                //{
+                //    if(path.Contains(n))
+                //    {
+                //        Gizmos.color = Color.black;
+                //    }
+                //}
                 //if(playerNode == n)
                 //{
                 //    Gizmos.color = Color.green;
@@ -131,5 +155,12 @@ public class Grid : MonoBehaviour {
                 Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeDiameter - 0.1f));
             }
         }
+    }
+
+    [System.Serializable]
+    public class TerrianType
+    {
+        public LayerMask terrainMask;
+        public int terrainPenalty;
     }
 }
